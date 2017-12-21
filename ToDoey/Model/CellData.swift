@@ -9,7 +9,7 @@
 import Foundation
 
 
-class CellData {
+class CellData : Codable {
     var title : String = ""
     var done : Bool = false
 }

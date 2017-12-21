@@ -13,28 +13,17 @@ class TodoListViewController: UITableViewController {
     var cellModels = [CellData]()
     
     
-    let defaults = UserDefaults.standard
+    let userDefault = UserDefaults.standard
+    
+    //code gets stored and retrieved form this plist file
+    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+    
     
     override func viewDidLoad() {
         super.viewDidLoad()
-    
-        let newItemOne = CellData()
-        newItemOne.title = "Wazy"
-        cellModels.append(newItemOne)
-
-        let newItemTwo = CellData()
-        newItemTwo.title = "Belz"
-        cellModels.append(newItemTwo)
-        
-        let newItemThree = CellData()
-        newItemThree.title = "Petruska"
-        cellModels.append(newItemThree)
-        
-        //grabbing the code we've saved into user defaults
-        if let items = defaults.array(forKey: "TodoListArray") as? [CellData] {
-            cellModels = items
-        }
-        
+       
+        print (dataFilePath ?? "wazy")
+        loadCells()
     }
     
     //DATA SOURCE METHODS
@@ -48,7 +37,6 @@ class TodoListViewController: UITableViewController {
         
         // Ternary Operator:
         // value = condition ? valueIfTrue : valueIfFalse
-        
         cell.accessoryType = cellModels[indexPath.row].done ? .checkmark : .none
         
         
@@ -62,8 +50,8 @@ class TodoListViewController: UITableViewController {
         //(cleaner code than if else)
         self.cellModels[indexPath.row].done = !self.cellModels[indexPath.row].done
         
+        self.saveItems()
         
-        tableView.reloadData()
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -78,22 +66,45 @@ class TodoListViewController: UITableViewController {
             newCell.title = textField.text!
             
             self.cellModels.append(newCell)
+            self.saveItems()
             
-            
-            //the key identifies the array inside our user defaults
-            //you need the key for the plist (where user default is saved)
-//            self.defaults.setValue(self.itemArray, forKey: "TodoListArray")
-            
-            self.tableView.reloadData()
         }
         
         alert.addTextField { (alertTextfield) in
             alertTextfield.placeholder = ""
             textField = alertTextfield
         }
-      
+        
         alert.addAction(action)
         present(alert, animated: true, completion: nil)
     }
+    
+    func saveItems()  {
+        //the key identifies the array inside our user defaults
+        //you need the key for the plist (where user default is saved)
+        //self.defaults.setValue(self.cellModels, forKey: "TodoListArray")
+        
+        let encoder = PropertyListEncoder()
+        do {
+            //encode the data in the cellModel array
+            let data = try encoder.encode(cellModels)
+            try data.write(to: dataFilePath!)
+        } catch {
+            print (error.localizedDescription)
+        }
+        self.tableView.reloadData()
+    }
+    
+    func loadCells()  {
+        if let data = try? Data(contentsOf: self.dataFilePath!) {
+            let decoder = PropertyListDecoder()
+            do {
+                self.cellModels = try decoder.decode([CellData].self, from: data)
+            } catch {
+                print (error.localizedDescription)
+            }
+        }
+    }
+    
 }
 
