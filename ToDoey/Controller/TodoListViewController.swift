@@ -7,26 +7,25 @@
 //
 
 import UIKit
+import CoreData
 
 class TodoListViewController: UITableViewController {
     
-    var cellModels = [CellData]()
+    var cellModels = [Item]()
+    var selectedCategory : Category? {
+        //this stuff happens as soon as selectedCategory gets set with a value
+        didSet {
+            loadItems()
+        }
+    }
     
-    
-    let userDefault = UserDefaults.standard
-    
-    //code gets stored and retrieved form this plist file
-    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
-    
+    //UIApplication.shared() = a singleton of when the app is running live for the user
+    let moc = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
     
     override func viewDidLoad() {
         super.viewDidLoad()
-       
-        print (dataFilePath ?? "wazy")
-        loadCells()
     }
     
-    //DATA SOURCE METHODS
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return self.cellModels.count
     }
@@ -39,7 +38,6 @@ class TodoListViewController: UITableViewController {
         // value = condition ? valueIfTrue : valueIfFalse
         cell.accessoryType = cellModels[indexPath.row].done ? .checkmark : .none
         
-        
         return cell
     }
     
@@ -49,9 +47,7 @@ class TodoListViewController: UITableViewController {
         //If false become true
         //(cleaner code than if else)
         self.cellModels[indexPath.row].done = !self.cellModels[indexPath.row].done
-        
         self.saveItems()
-        
         tableView.deselectRow(at: indexPath, animated: true)
     }
     
@@ -62,12 +58,15 @@ class TodoListViewController: UITableViewController {
         
         let action = UIAlertAction(title: "Add Item", style: .default) { (action) in
             
-            let newCell = CellData()
-            newCell.title = textField.text!
+            let coreDataItem = Item(context: self.moc)
+            coreDataItem.title = textField.text!
+            coreDataItem.done = false
             
-            self.cellModels.append(newCell)
+            //the parent item is the item we segued from as indicated by the selected category var
+            coreDataItem.parentCategory = self.selectedCategory
+            
+            self.cellModels.append(coreDataItem)
             self.saveItems()
-            
         }
         
         alert.addTextField { (alertTextfield) in
@@ -80,31 +79,62 @@ class TodoListViewController: UITableViewController {
     }
     
     func saveItems()  {
-        //the key identifies the array inside our user defaults
-        //you need the key for the plist (where user default is saved)
-        //self.defaults.setValue(self.cellModels, forKey: "TodoListArray")
-        
-        let encoder = PropertyListEncoder()
         do {
-            //encode the data in the cellModel array
-            let data = try encoder.encode(cellModels)
-            try data.write(to: dataFilePath!)
+            //we need moc.save() to transfer data from temporary context to permanent container
+            try moc.save()
         } catch {
             print (error.localizedDescription)
         }
         self.tableView.reloadData()
     }
     
-    func loadCells()  {
-        if let data = try? Data(contentsOf: self.dataFilePath!) {
-            let decoder = PropertyListDecoder()
-            do {
-                self.cellModels = try decoder.decode([CellData].self, from: data)
-            } catch {
-                print (error.localizedDescription)
+    //we have a default value for the fetchRequest parameter so we can call func without paramters
+    func loadItems(with request : NSFetchRequest<Item> = Item.fetchRequest(), predicate : NSPredicate? = nil) {
+        
+        //makes sure we filter and keep the items where the parent category matches the selected cateogry
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+        
+        if let unwrappedCompoundPredicate = predicate {
+            request.predicate =  NSCompoundPredicate(andPredicateWithSubpredicates: [unwrappedCompoundPredicate])
+        } else {
+            request.predicate = categoryPredicate
+        }
+        
+        do  {
+            cellModels = try moc.fetch(request)
+        } catch {
+            print (error.localizedDescription)
+        }
+        tableView.reloadData()
+    }
+}
+
+//Search Bar Functionality:
+extension TodoListViewController : UISearchBarDelegate {
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        let request : NSFetchRequest<Item> = Item.fetchRequest()
+        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)//searchBar.text! is passed into %@
+        
+        //the order in which we want our data returned
+        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        
+        //search must contain the title
+        loadItems(with: request, predicate: predicate)
+        tableView.reloadData()
+    }
+    
+    
+    //every letter you type triggers this method
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        if searchBar.text?.count == 0 {
+            loadItems()
+            
+            //Dispatch Queue = assigns projects to different threads
+            //Main Thread = Where you update the UI
+            DispatchQueue.main.async {
+                searchBar.resignFirstResponder()
             }
         }
     }
-    
 }
 
